@@ -269,7 +269,7 @@ def app_transferencias():
                         "CODIGO BARRA": cod,
                         "CODIGO": produto.get("CODIGO", ""),
                         "FORNECEDOR": produto.get("FORNECEDOR", ""),
-                        "DESCRICAO": produto.get("DESCRIÇÃO", ""),
+                        "DESCRICAO": produto.get("DESCRICAO", ""),
                         "QUANTIDADE": qtd
                     })
 
@@ -287,7 +287,7 @@ def app_transferencias():
                     "CODIGO BARRA": produto["CODIGO BARRA"],
                     "CODIGO": produto["CODIGO"],
                     "FORNECEDOR": produto["FORNECEDOR"],
-                    "DESCRICAO": produto["DESCRIÇÃO"],
+                    "DESCRICAO": produto["DESCRICAO"],
                     "QUANTIDADE": busca_qtd
                 })
                 st.toast("✅ Produto adicionado com sucesso!")
