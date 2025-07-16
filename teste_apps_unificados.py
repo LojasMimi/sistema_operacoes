@@ -42,7 +42,7 @@ st.sidebar.image(logo, use_container_width=True)
 st.sidebar.markdown("## 📁 Menu de Operações")
 menu = st.sidebar.radio(
     "Escolha a operação:",
-    ["♻️ Processo de Trocas", "🛍️ Processo de Pedidos", "📦 Transferência entre Lojas"]
+    ["♻️ Processo de Trocas", "🛍️ Processo de Pedidos", "📦 Transferência entre Lojas", "🔍 Pesquisa de Produtos"]
 )
 
 # ========================= FUNÇÕES COMUNS =========================
@@ -312,6 +312,36 @@ def app_transferencias():
             buffer.seek(0)
             st.download_button("⬇️ Baixar Formulário Preenchido", buffer, "TRANSFERENCIA.xlsx")
 
+def app_pesquisa():
+    st.header("🔍 Pesquisa de Produtos")
+    st.divider()
+
+    df = carregar_csv_combinado()
+
+    tipo_busca = st.selectbox("Buscar por:", ["Código de Barras", "Código VF", "REF"])
+    entrada = st.text_input(f"Digite o {tipo_busca.lower()}")
+
+    colunas_mapeadas = {
+        "Código de Barras": "CODIGO BARRA",
+        "Código VF": "VAREJO FACIL",
+        "REF": "CODIGO"
+    }
+
+    coluna = colunas_mapeadas.get(tipo_busca)
+
+    if st.button("🔎 Pesquisar"):
+        if coluna not in df.columns:
+            st.warning(f"A coluna '{coluna}' não foi encontrada.")
+        elif entrada.strip() == "":
+            st.warning("Digite um valor para pesquisar.")
+        else:
+            resultados = df[df[coluna].astype(str).str.contains(entrada, case=False, na=False)]
+            if not resultados.empty:
+                st.success(f"{len(resultados)} resultado(s) encontrado(s):")
+                st.dataframe(resultados, use_container_width=True)
+            else:
+                st.warning("Nenhum resultado encontrado.")
+
 # ========================= EXECUTAR SEÇÃO ESCOLHIDA =========================
 if menu == "♻️ Processo de Trocas":
     app_trocas()
@@ -319,6 +349,8 @@ elif menu == "🛍️ Processo de Pedidos":
     app_pedidos()
 elif menu == "📦 Transferência entre Lojas":
     app_transferencias()
+elif menu == "🔍 Pesquisa de Produtos":
+    app_pesquisa()
 
 # ========================= RODAPÉ =========================
 st.markdown("""
