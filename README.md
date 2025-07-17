@@ -1,16 +1,17 @@
 # 🧠 Sistema de Operações – Lojas MIMI
 
-**Versão:** 1.0
+**Versão:** 2.0
 **Desenvolvedor:** Pablo
 **Última atualização:** 2025
 
 ## 📦 Visão Geral
 
-O **Sistema de Operações – Lojas MIMI** é um aplicativo web desenvolvido com Python e Streamlit para unificar e digitalizar três processos logísticos internos das unidades da rede:
+O **Sistema de Operações – Lojas MIMI** é um aplicativo web desenvolvido com Python e Streamlit para unificar e digitalizar processos logísticos internos das unidades da rede:
 
 * Processo de **Trocas** com fornecedores
 * Solicitação de **Pedidos** pelas unidades
 * **Transferência de produtos** entre lojas
+* **Pesquisa de Produtos** na base corporativa
 
 A aplicação centraliza essas funcionalidades em uma interface intuitiva, segura e com geração automática de planilhas integráveis ao sistema interno da empresa.
 
@@ -37,6 +38,13 @@ A aplicação centraliza essas funcionalidades em uma interface intuitiva, segur
 * Seleção de loja de origem e destino
 * Cadastro de transferências individual ou em lote via Excel
 * Geração de relatórios em template padrão: `FORMULÁRIO DE TRANSFERENCIA ENTRE LOJAS.xlsx`
+
+### 🔍 Pesquisa de Produtos (**Novo na versão 2.0**)
+
+* Busca de produtos diretamente na base corporativa
+* Suporte a múltiplos tipos de código: Código de Barras, Código VF e REF
+* Resultados apresentados diretamente na interface
+* Fonte oficial e centralizada: planilha `cad_concatenado.csv` hospedada no GitHub
 
 ---
 
@@ -65,7 +73,7 @@ pip install -r requirements.txt
 ### Execução
 
 ```bash
-streamlit teste_apps_unificados.py
+streamlit run teste_apps_unificados.py
 ```
 
 Abra [http://localhost:8501](http://localhost:8501) no navegador.
@@ -99,6 +107,7 @@ sistema-operacoes/
 * Suporta adição incremental de produtos sem duplicações
 * Utiliza planilha de catálogo padronizada hospedada em:
   [cad\_concatenado.csv (GitHub)](https://raw.githubusercontent.com/LojasMimi/transferencia_loja/refs/heads/main/cad_concatenado.csv)
+* A nova funcionalidade de **Pesquisa de Produtos** utiliza essa planilha para busca direta na interface
 
 ---
 
@@ -112,6 +121,4 @@ Este sistema foi desenvolvido por **Pablo** para uso interno das **Lojas MIMI**,
 
 **Privado** — Este sistema é de uso exclusivo das Lojas MIMI.
 © 2025 Lojas MIMI – Todos os direitos reservados.
-
----
 
