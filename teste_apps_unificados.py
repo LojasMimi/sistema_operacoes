@@ -97,64 +97,85 @@ def app_trocas():
 
     df_combinado = carregar_csv_combinado()
 
-    with st.container():
+    fornecedores_unicos = sorted(df_combinado["FORNECEDOR"].dropna().unique())
+    selected_fornecedor = st.selectbox("Selecione o Fornecedor para realizar a troca:", [""] + fornecedores_unicos)
+
+    if selected_fornecedor:
+        df_fornecedor = df_combinado[df_combinado["FORNECEDOR"] == selected_fornecedor]
+
         st.subheader("🔍 Buscar Produto para Troca")
         col1, col2, col3 = st.columns([3, 4, 2])
         tipo_busca = col1.selectbox("Buscar por:", ["CÓDIGO DE BARRAS", "REF"])
-        identificador = col2.text_input("Digite o identificador:", help="Código de barras ou REF")
+        coluna_id = "CODIGO BARRA" if tipo_busca == "CÓDIGO DE BARRAS" else "CODIGO"
+        identificadores_disponiveis = sorted(df_fornecedor[coluna_id].dropna().astype(str).str.strip().unique())
+        identificador = col2.selectbox(f"Selecione o {tipo_busca}:", [""] + identificadores_disponiveis)
         quantidade = col3.number_input("Quantidade", min_value=1, step=1, value=1)
 
         if st.button("🔎 Buscar Produto para Troca"):
-            coluna_df = "CODIGO BARRA" if tipo_busca == "CÓDIGO DE BARRAS" else "CODIGO"
-            resultado = buscar_produto(identificador, coluna_df, df_combinado)
-            if resultado is not None:
-                st.session_state.trocas_dados.append({
-                    "CODIGO BARRA": resultado.get("CODIGO BARRA", ""),
-                    "CODIGO": resultado.get("CODIGO", ""),
-                    "FORNECEDOR": resultado.get("FORNECEDOR", ""),
-                    "DESCRICAO": resultado.get("DESCRICAO", ""),
-                    "QUANTIDADE": quantidade,
-                    "ORIGEM": resultado.get("__ORIGEM_PLANILHA__", "")
-                })
-                st.toast("✅ Produto adicionado com sucesso!")
+            if not identificador:
+                st.warning("❌ Por favor, selecione um identificador válido.")
             else:
-                st.warning("❌ Produto não encontrado. Verifique o código ou REF.")
+                resultado = buscar_produto(identificador, coluna_id, df_fornecedor)
+                if resultado is not None:
+                    st.session_state.trocas_dados.append({
+                        "CODIGO BARRA": resultado.get("CODIGO BARRA", ""),
+                        "CODIGO": resultado.get("CODIGO", ""),
+                        "FORNECEDOR": resultado.get("FORNECEDOR", ""),
+                        "DESCRICAO": resultado.get("DESCRIÇÃO", ""),
+                        "QUANTIDADE": quantidade
+                    })
+                    st.success(f"✅ Produto adicionado: {resultado.get('DESCRIÇÃO', '')}")
+                else:
+                    st.warning("❌ Produto não encontrado com esse identificador.")
+    else:
+        st.info("Por favor, selecione um fornecedor para iniciar o processo de troca.")
 
     if st.session_state.trocas_dados:
-        st.subheader("📋 Produtos para Troca")
+        st.subheader(f"📋 Produtos para Troca ({len(st.session_state.trocas_dados)} itens)")
         df_trocas = pd.DataFrame(st.session_state.trocas_dados)
         st.dataframe(df_trocas, use_container_width=True)
 
         colA, colB = st.columns([1, 3])
         if colA.button("🗑️ Remover Último Item"):
             removido = st.session_state.trocas_dados.pop()
-            st.toast(f"Item removido: {removido['DESCRICAO']}")
+            st.warning(f"Item removido: {removido['DESCRICAO']} (Qtd: {removido['QUANTIDADE']})")
+
+        def gerar_formulario_excel(dados):
+            fornecedores = set(item['FORNECEDOR'] for item in dados)
+            if len(fornecedores) > 1:
+                return None, "❌ Existem múltiplos fornecedores na lista."
+            try:
+                wb = load_workbook("FORM-TROCAS.xlsx")
+                ws = wb.active
+                fornecedor = fornecedores.pop()
+                ws["C3"] = fornecedor
+                for i, item in enumerate(dados[:27]):
+                    row = i + 6
+                    ws[f"A{row}"] = item["CODIGO BARRA"]
+                    ws[f"B{row}"] = item["CODIGO"]
+                    ws[f"C{row}"] = item["DESCRICAO"]
+                    ws[f"D{row}"] = item["QUANTIDADE"]
+                output = BytesIO()
+                wb.save(output)
+                output.seek(0)
+                return output, None
+            except Exception as e:
+                return None, f"Erro ao gerar formulário: {e}"
 
         if colB.button("📄 Gerar Formulário de Troca"):
-            fornecedores = set(item['FORNECEDOR'] for item in st.session_state.trocas_dados)
-            if len(fornecedores) > 1:
-                st.error("❌ Múltiplos fornecedores na lista.")
-                return
-            try:
-                with st.spinner("Gerando formulário..."):
-                    wb = load_workbook("FORM-TROCAS.xlsx")
-                    ws = wb.active
-                    ws["C3"] = fornecedores.pop()
-                    for i, item in enumerate(st.session_state.trocas_dados[:27]):
-                        row = i + 6
-                        ws[f"A{row}"] = item["CODIGO BARRA"]
-                        ws[f"B{row}"] = item["CODIGO"]
-                        ws[f"C{row}"] = item["DESCRICAO"]
-                        ws[f"D{row}"] = item["QUANTIDADE"]
-                    output = BytesIO()
-                    wb.save(output)
-                    output.seek(0)
-                    st.success("✅ Formulário gerado com sucesso!")
-                    st.download_button("📥 Baixar Formulário", output, file_name="FORMULARIO_TROCA.xlsx")
-            except Exception as e:
-                st.error(f"Erro ao gerar planilha: {e}")
+            excel_bytes, erro = gerar_formulario_excel(st.session_state.trocas_dados)
+            if erro:
+                st.error(erro)
+            else:
+                st.success("✅ Formulário gerado com sucesso!")
+                st.download_button(
+                    label="📥 Baixar Formulário de Troca",
+                    data=excel_bytes,
+                    file_name="FORMULARIO_TROCA.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
     else:
-        st.info("Nenhum produto adicionado ainda.")
+        st.info("Nenhum produto adicionado para troca ainda.")
 
 # ========================= APP 2: PEDIDOS =========================
 def app_pedidos():
