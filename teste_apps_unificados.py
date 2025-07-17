@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import requests
 from openpyxl import load_workbook
 from io import BytesIO
 from datetime import datetime
@@ -29,6 +30,13 @@ st.markdown("""
     .stSelectbox, .stTextInput, .stNumberInput {
         border: 1px solid #ccc;
         border-radius: 5px;
+    }
+    .big-font {
+        font-size: 22px !important;
+    }
+    .small-font {
+        font-size: 14px;
+        color: gray;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -290,7 +298,7 @@ def app_transferencias():
                     "DESCRICAO": produto["DESCRICAO"],
                     "QUANTIDADE": busca_qtd
                 })
-                st.toast("✅ Produto adicionado com sucesso!")
+                st.toast("✅Produto adicionado com sucesso!")
 
     if st.session_state.formulario_dados:
         df_form = pd.DataFrame(st.session_state.formulario_dados)
@@ -312,37 +320,57 @@ def app_transferencias():
             buffer.seek(0)
             st.download_button("⬇️ Baixar Formulário Preenchido", buffer, "TRANSFERENCIA.xlsx")
 
+# ========================= APP 4: PESQUISA DE PRODUTOS (API) =========================
 def app_pesquisa():
-    st.header("🔍 Pesquisa de Produtos")
+    st.header("🔍 Pesquisa de Produtos (API Varejo Fácil)")
     st.divider()
+    st.markdown("<p class='small-font' style='text-align: center;'>Consulta em tempo real na base do Varejo Fácil</p>", unsafe_allow_html=True)
 
-    df = carregar_csv_combinado()
+    codigo_barras = st.text_input("📦 Digite o código de barras do produto", placeholder="Ex: 7891234567890")
 
-    tipo_busca = st.selectbox("Buscar por:", ["Código de Barras", "Código VF", "REF"])
-    entrada = st.text_input(f"Digite o {tipo_busca.lower()}")
-
-    colunas_mapeadas = {
-        "Código de Barras": "CODIGO BARRA",
-        "Código VF": "VAREJO FACIL",
-        "REF": "CODIGO"
-    }
-
-    coluna = colunas_mapeadas.get(tipo_busca)
-
-    if st.button("🔎 Pesquisar"):
-        if coluna not in df.columns:
-            st.warning(f"A coluna '{coluna}' não foi encontrada.")
-        elif entrada.strip() == "":
-            st.warning("Digite um valor para pesquisar.")
+    if st.button("🔎 Consultar Produto"):
+        if not codigo_barras.strip():
+            st.warning("⚠️ Por favor, digite um código de barras válido.")
         else:
-            resultados = df[df[coluna].astype(str).str.contains(entrada, case=False, na=False)]
-            if not resultados.empty:
-                st.success(f"{len(resultados)} resultado(s) encontrado(s):")
-                st.dataframe(resultados, use_container_width=True)
-            else:
-                st.warning("Nenhum resultado encontrado.")
+            url_1 = f"https://lojasmimi.varejofacil.com/api/v1/produto/produtos/consulta/0{codigo_barras}"
+            headers = {
+                'x-api-key': st.secrets.api.x_api_key,
+                'Cookie': st.secrets.api.cookie
+            }
+            try:
+                response_1 = requests.get(url_1, headers=headers)
+                if response_1.status_code == 200:
+                    dados_produto = response_1.json()
+                    if 'id' in dados_produto and 'descricao' in dados_produto:
+                        produto_id = dados_produto['id']
+                        descricao = dados_produto['descricao']
+                        st.success("✅ Produto encontrado com sucesso!")
+                        st.markdown(f"<div class='big-font'><strong>📄 Descrição:</strong> {descricao}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='small-font'>🆔 ID do Produto: {produto_id}</div>", unsafe_allow_html=True)
 
-# ========================= EXECUTAR SEÇÃO ESCOLHIDA =========================
+                        url_2 = f"https://lojasmimi.varejofacil.com/api/v1/produto/produtos/{produto_id}/precos"
+                        response_2 = requests.get(url_2, headers=headers)
+                        if response_2.status_code == 200:
+                            lista_precos = response_2.json()
+                            preco_loja_1 = next((item for item in lista_precos if item.get("lojaId") == 1), None)
+                            if preco_loja_1:
+                                preco_venda = preco_loja_1.get("precoVenda1", "N/A")
+                                custo = preco_loja_1.get("custoProduto", "N/A")
+                                with st.expander("💰 Ver detalhes de preço"):
+                                    st.write(f"**Preço de Venda:** R$ {preco_venda:.2f}" if isinstance(preco_venda, (int, float)) else f"**Preço de Venda:** {preco_venda}")
+                                    st.write(f"**Custo do Produto:** R$ {custo:.2f}" if isinstance(custo, (int, float)) else f"**Custo do Produto:** {custo}")
+                            else:
+                                st.info("ℹ️ Nenhuma informação de preço disponível para esta loja.")
+                        else:
+                            st.error(f"❌ Erro ao consultar preços: {response_2.status_code}")
+                    else:
+                        st.warning("🚫 Produto não encontrado ou dados incompletos.")
+                else:
+                    st.error(f"❌ Erro ao buscar produto: Código {response_1.status_code}")
+            except Exception as e:
+                st.exception(f"Erro inesperado: {e}")
+
+# ========================= EXECUTAR OPERAÇÃO =========================
 if menu == "♻️ Processo de Trocas":
     app_trocas()
 elif menu == "🛍️ Processo de Pedidos":
