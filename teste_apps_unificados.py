@@ -121,10 +121,10 @@ def app_trocas():
                         "CODIGO BARRA": resultado.get("CODIGO BARRA", ""),
                         "CODIGO": resultado.get("CODIGO", ""),
                         "FORNECEDOR": resultado.get("FORNECEDOR", ""),
-                        "DESCRICAO": resultado.get("DESCRIÇÃO", ""),
+                        "DESCRICAO": resultado.get("DESCRICAO", ""),
                         "QUANTIDADE": quantidade
                     })
-                    st.success(f"✅ Produto adicionado: {resultado.get('DESCRIÇÃO', '')}")
+                    st.success(f"✅ Produto adicionado: {resultado.get('DESCRICAO', '')}")
                 else:
                     st.warning("❌ Produto não encontrado com esse identificador.")
     else:
