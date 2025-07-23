@@ -1,12 +1,14 @@
 import streamlit as st
 import pandas as pd
 import requests
+import json
+import datetime
 from openpyxl import load_workbook
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime as dt
 from PIL import Image
 
-# ========================= CONFIG GERAL =========================
+# ========================= CONFIGURAÇÃO GERAL =========================
 st.set_page_config(
     page_title="Operações - Lojas MIMI",
     page_icon="🧠",
@@ -14,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ========================= ESTILO PERSONALIZADO =========================
+# ========================= ESTILO =========================
 st.markdown("""
     <style>
     .stButton > button {
@@ -41,17 +43,21 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ========================= TÍTULO PRINCIPAL =========================
-st.title("🧠 Sistema de Operações - Lojas MIMI")
-
 # ========================= MENU LATERAL =========================
 logo = Image.open("logo_lojas_mimi.jpeg")
 st.sidebar.image(logo, use_container_width=True)
 st.sidebar.markdown("## 📁 Menu de Operações")
 menu = st.sidebar.radio(
     "Escolha a operação:",
-    ["♻️ Processo de Trocas", "🛍️ Processo de Pedidos", "📦 Transferência entre Lojas", "🔍 Pesquisa de Produtos"]
+    [
+        "♻️ Processo de Trocas",
+        "🛍️ Processo de Pedidos",
+        "📦 Transferência entre Lojas",
+        "🔍 Pesquisa de Produtos",
+        "🛠️ Atualizador de Preços"
+    ]
 )
+st.title("🧠 Sistema de Operações - Lojas MIMI")
 
 # ========================= FUNÇÕES COMUNS =========================
 @st.cache_data(show_spinner=False)
@@ -60,26 +66,22 @@ def carregar_csv_combinado():
     df = pd.read_csv(url, dtype=str).fillna("")
     df = df.loc[:, ~df.columns.str.contains("^Unnamed", case=False)]
     df.columns = df.columns.str.strip().str.upper()
-
     def dedup_columns(cols):
         seen = {}
-        new_cols = []
-        for col in cols:
-            if col in seen:
-                seen[col] += 1
-                new_cols.append(f"{col}_{seen[col]}")
+        new = []
+        for c in cols:
+            if c in seen:
+                seen[c] += 1
+                new.append(f"{c}_{seen[c]}")
             else:
-                seen[col] = 0
-                new_cols.append(col)
-        return new_cols
-
+                seen[c] = 0
+                new.append(c)
+        return new
     df.columns = dedup_columns(df.columns)
-
     if "SITUACAO" in df.columns:
         df["SITUACAO"] = df["SITUACAO"].str.replace("ç", "c", regex=False)
     if "DESCRIÇÃO" in df.columns:
         df["DESCRIÇÃO"] = df["DESCRIÇÃO"].str.replace("ç", "c", regex=False)
-
     return df
 
 def buscar_produto(codigo, coluna, df):
@@ -91,307 +93,327 @@ def buscar_produto(codigo, coluna, df):
 def app_trocas():
     st.header("♻️ Processo de Trocas")
     st.divider()
-
     if "trocas_dados" not in st.session_state:
         st.session_state.trocas_dados = []
-
-    df_combinado = carregar_csv_combinado()
-
-    fornecedores_unicos = sorted(df_combinado["FORNECEDOR"].dropna().unique())
-    selected_fornecedor = st.selectbox("Selecione o Fornecedor para realizar a troca:", [""] + fornecedores_unicos)
-
-    if selected_fornecedor:
-        df_fornecedor = df_combinado[df_combinado["FORNECEDOR"] == selected_fornecedor]
-
+    df = carregar_csv_combinado()
+    fornecedores = sorted(df["FORNECEDOR"].dropna().unique())
+    sel = st.selectbox("Fornecedor:", [""] + fornecedores)
+    if sel:
+        df_f = df[df["FORNECEDOR"] == sel]
         st.subheader("🔍 Buscar Produto para Troca")
-        col1, col2, col3 = st.columns([3, 4, 2])
-        tipo_busca = col1.selectbox("Buscar por:", ["CÓDIGO DE BARRAS", "REF"])
-        coluna_id = "CODIGO BARRA" if tipo_busca == "CÓDIGO DE BARRAS" else "CODIGO"
-        identificadores_disponiveis = sorted(df_fornecedor[coluna_id].dropna().astype(str).str.strip().unique())
-        identificador = col2.selectbox(f"Selecione o {tipo_busca}:", [""] + identificadores_disponiveis)
-        quantidade = col3.number_input("Quantidade", min_value=1, step=1, value=1)
-
+        c1,c2,c3 = st.columns([3,4,2])
+        tipo = c1.selectbox("Buscar por:", ["CÓDIGO DE BARRAS", "REF"])
+        col = "CODIGO BARRA" if tipo=="CÓDIGO DE BARRAS" else "CODIGO"
+        ids = sorted(df_f[col].dropna().astype(str).str.strip().unique())
+        ident = c2.selectbox(tipo+":", [""]+ids)
+        qtd = c3.number_input("Quantidade",1,step=1,value=1)
         if st.button("🔎 Buscar Produto para Troca"):
-            if not identificador:
-                st.warning("❌ Por favor, selecione um identificador válido.")
+            if not ident:
+                st.warning("Selecione um identificador válido.")
             else:
-                resultado = buscar_produto(identificador, coluna_id, df_fornecedor)
-                if resultado is not None:
+                res = buscar_produto(ident, col, df_f)
+                if res is not None:
                     st.session_state.trocas_dados.append({
-                        "CODIGO BARRA": resultado.get("CODIGO BARRA", ""),
-                        "CODIGO": resultado.get("CODIGO", ""),
-                        "FORNECEDOR": resultado.get("FORNECEDOR", ""),
-                        "DESCRICAO": resultado.get("DESCRICAO", ""),
-                        "QUANTIDADE": quantidade
+                        "CODIGO BARRA": res.get("CODIGO BARRA",""),
+                        "CODIGO": res.get("CODIGO",""),
+                        "FORNECEDOR": res.get("FORNECEDOR",""),
+                        "DESCRICAO": res.get("DESCRICAO",""),
+                        "QUANTIDADE": qtd
                     })
-                    st.success(f"✅ Produto adicionado: {resultado.get('DESCRICAO', '')}")
+                    st.success(f"Adicionado: {res.get('DESCRICAO','')}")
                 else:
-                    st.warning("❌ Produto não encontrado com esse identificador.")
+                    st.warning("Produto não encontrado.")
     else:
-        st.info("Por favor, selecione um fornecedor para iniciar o processo de troca.")
-
+        st.info("Selecione um fornecedor.")
     if st.session_state.trocas_dados:
-        st.subheader(f"📋 Produtos para Troca ({len(st.session_state.trocas_dados)} itens)")
-        df_trocas = pd.DataFrame(st.session_state.trocas_dados)
-        st.dataframe(df_trocas, use_container_width=True)
-
-        colA, colB = st.columns([1, 3])
-        if colA.button("🗑️ Remover Último Item"):
-            removido = st.session_state.trocas_dados.pop()
-            st.warning(f"Item removido: {removido['DESCRICAO']} (Qtd: {removido['QUANTIDADE']})")
-
-        def gerar_formulario_excel(dados):
-            fornecedores = set(item['FORNECEDOR'] for item in dados)
-            if len(fornecedores) > 1:
-                return None, "❌ Existem múltiplos fornecedores na lista."
+        df_t = pd.DataFrame(st.session_state.trocas_dados)
+        st.subheader(f"📋 Itens ({len(df_t)}):")
+        st.dataframe(df_t, use_container_width=True)
+        cA,cB = st.columns([1,3])
+        if cA.button("🗑️ Remover Último"):
+            rem = st.session_state.trocas_dados.pop()
+            st.warning(f"Removido: {rem['DESCRICAO']}")
+        def ger_excel(dados):
+            provs = set(i['FORNECEDOR'] for i in dados)
+            if len(provs)>1:
+                return None, "Múltiplos fornecedores."
             try:
                 wb = load_workbook("FORM-TROCAS.xlsx")
                 ws = wb.active
-                fornecedor = fornecedores.pop()
-                ws["C3"] = fornecedor
-                for i, item in enumerate(dados[:27]):
-                    row = i + 6
-                    ws[f"A{row}"] = item["CODIGO BARRA"]
-                    ws[f"B{row}"] = item["CODIGO"]
-                    ws[f"C{row}"] = item["DESCRICAO"]
-                    ws[f"D{row}"] = item["QUANTIDADE"]
-                output = BytesIO()
-                wb.save(output)
-                output.seek(0)
-                return output, None
+                ws["C3"] = provs.pop()
+                for i,item in enumerate(dados[:27]):
+                    r = 6+i
+                    ws[f"A{r}"]=item["CODIGO BARRA"]
+                    ws[f"B{r}"]=item["CODIGO"]
+                    ws[f"C{r}"]=item["DESCRICAO"]
+                    ws[f"D{r}"]=item["QUANTIDADE"]
+                buf=BytesIO(); wb.save(buf); buf.seek(0)
+                return buf,None
             except Exception as e:
-                return None, f"Erro ao gerar formulário: {e}"
-
-        if colB.button("📄 Gerar Formulário de Troca"):
-            excel_bytes, erro = gerar_formulario_excel(st.session_state.trocas_dados)
-            if erro:
-                st.error(erro)
+                return None,str(e)
+        if cB.button("📄 Gerar Formulário"):
+            ex,err = ger_excel(st.session_state.trocas_dados)
+            if err: st.error(err)
             else:
-                st.success("✅ Formulário gerado com sucesso!")
-                st.download_button(
-                    label="📥 Baixar Formulário de Troca",
-                    data=excel_bytes,
-                    file_name="FORMULARIO_TROCA.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                st.success("Formulário pronto!")
+                st.download_button("📥 Baixar", ex, "FORMULARIO_TROCA.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
-        st.info("Nenhum produto adicionado para troca ainda.")
+        st.info("Nenhum item adicionado.")
 
 # ========================= APP 2: PEDIDOS =========================
 def app_pedidos():
     st.header("🛍️ Processo de Pedidos")
     st.divider()
-
     if "produtos_solicitados" not in st.session_state:
-        st.session_state.produtos_solicitados = []
-
+        st.session_state.produtos_solicitados=[]
     df = carregar_csv_combinado()
-
-    aba1, aba2, aba3 = st.tabs(["🧍 Individual", "📂 Lote", "📋 Revisão"])
-
+    aba1,aba2,aba3 = st.tabs(["🧍 Individual","📂 Lote","📋 Revisão"])
     with aba1:
-        fornecedores = sorted(df["FORNECEDOR"].dropna().unique())
-        forn = st.selectbox("Fornecedor:", fornecedores)
-        tipo = st.selectbox("Buscar por:", ["CÓDIGO DE BARRAS", "REF"])
-        col_busca = "CODIGO BARRA" if tipo == "CÓDIGO DE BARRAS" else "CODIGO"
-        df_filt = df[df["FORNECEDOR"] == forn]
-        opcao = st.selectbox("Produto:", sorted(df_filt[col_busca].dropna().unique()))
-        qtd = st.number_input("Quantidade:", min_value=1, step=1)
-
+        forn = st.selectbox("Fornecedor:", sorted(df["FORNECEDOR"].dropna().unique()))
+        tipo = st.selectbox("Buscar por:", ["CÓDIGO DE BARRAS","REF"])
+        col = "CODIGO BARRA" if tipo=="CÓDIGO DE BARRAS" else "CODIGO"
+        df_f = df[df["FORNECEDOR"]==forn]
+        opc = st.selectbox("Produto:", sorted(df_f[col].dropna().unique()))
+        qtd = st.number_input("Quantidade:",1,step=1)
         if st.button("➕ Adicionar Pedido"):
-            produto = df_filt[df_filt[col_busca] == opcao]
-            if not produto.empty:
-                p = produto.iloc[0]
-                item = {
-                    "FORNECEDOR": forn,
-                    "CODIGO BARRA": p["CODIGO BARRA"],
-                    "CODIGO": p["CODIGO"],
-                    "DESCRICAO": p["DESCRICAO"],
-                    "QTD": qtd,
-                    "ORIGEM": p.get("__ORIGEM_PLANILHA__", "")
-                }
-                st.session_state.produtos_solicitados.append(item)
+            prod = df_f[df_f[col]==opc]
+            if not prod.empty:
+                p=prod.iloc[0]
+                it={"FORNECEDOR":forn,"CODIGO BARRA":p["CODIGO BARRA"],"CODIGO":p["CODIGO"],
+                    "DESCRICAO":p["DESCRICAO"],"QTD":qtd,"ORIGEM":p.get("__ORIGEM_PLANILHA__","")}
+                st.session_state.produtos_solicitados.append(it)
                 st.toast("✅ Produto adicionado!")
             else:
-                st.error("❌ Produto não encontrado.")
-
+                st.error("Produto não encontrado.")
     with aba2:
-        col1, col2 = st.columns(2)
-        if col1.button("📥 Baixar Modelo Excel"):
-            modelo = pd.DataFrame(columns=["CODIGO BARRA", "CODIGO", "QTD"])
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                modelo.to_excel(writer, index=False, sheet_name="Modelo")
-            output.seek(0)
-            st.download_button("⬇️ Baixar modelo", output, "modelo_pedido.xlsx")
-
-        arquivo = col2.file_uploader("📤 Enviar Excel Preenchido", type=["xlsx"])
-        tipo_col = st.selectbox("Usar como identificador:", ["CÓDIGO DE BARRAS", "REF"])
-        col_id = "CODIGO BARRA" if tipo_col == "CÓDIGO DE BARRAS" else "CODIGO"
-
-        if arquivo:
-            with st.spinner("Carregando dados..."):
-                wb = load_workbook(filename=BytesIO(arquivo.read()))
-                ws = wb.active
-                data = ws.values
-                cols = next(data)
-                df_lote = pd.DataFrame(data, columns=cols).fillna("")
-                for _, row in df_lote.iterrows():
-                    cod = str(row.get(col_id, "")).strip()
-                    qtd = int(str(row.get("QTD", "0")).strip())
-                    produto = df[df[col_id] == cod]
-                    if not produto.empty:
-                        p = produto.iloc[0]
-                        item = {
-                            "FORNECEDOR": p["FORNECEDOR"],
-                            "CODIGO BARRA": p["CODIGO BARRA"],
-                            "CODIGO": p["CODIGO"],
-                            "DESCRICAO": p["DESCRICAO"],
-                            "QTD": qtd,
-                            "ORIGEM": p.get("__ORIGEM_PLANILHA__", "")
-                        }
-                        st.session_state.produtos_solicitados.append(item)
-                st.toast("✅ Produtos adicionados!")
-
+        c1,c2 = st.columns(2)
+        if c1.button("📥 Baixar Modelo Excel"):
+            modelo = pd.DataFrame(columns=["CODIGO BARRA","CODIGO","QTD"])
+            buf=BytesIO()
+            with pd.ExcelWriter(buf, engine='openpyxl') as w:
+                modelo.to_excel(w,index=False,sheet_name="Modelo")
+            buf.seek(0)
+            st.download_button("⬇️",buf,"modelo_pedido.xlsx")
+        arq = c2.file_uploader("📤 Enviar Excel", type=["xlsx"])
+        tipo_col = st.selectbox("Usar como identificador:", ["CÓDIGO DE BARRAS","REF"])
+        col_id = "CODIGO BARRA" if tipo_col=="CÓDIGO DE BARRAS" else "CODIGO"
+        if arq:
+            wb = load_workbook(filename=BytesIO(arq.read()))
+            ws = wb.active
+            data = ws.values
+            cols = next(data)
+            df_l = pd.DataFrame(data, columns=cols).fillna("")
+            for _,row in df_l.iterrows():
+                cod = str(row.get(col_id,"")).strip()
+                qtd = int(str(row.get("QTD","0")).strip())
+                prod = df[df[col_id]==cod]
+                if not prod.empty:
+                    p=prod.iloc[0]
+                    it={"FORNECEDOR":p["FORNECEDOR"],"CODIGO BARRA":p["CODIGO BARRA"],
+                        "CODIGO":p["CODIGO"],"DESCRICAO":p["DESCRICAO"],
+                        "QTD":qtd,"ORIGEM":p.get("__ORIGEM_PLANILHA__","")}
+                    st.session_state.produtos_solicitados.append(it)
+            st.toast("✅ Produtos adicionados!")
     with aba3:
         if st.session_state.produtos_solicitados:
-            df_final = pd.DataFrame(st.session_state.produtos_solicitados)
-            st.dataframe(df_final, use_container_width=True)
-
+            df_f = pd.DataFrame(st.session_state.produtos_solicitados)
+            st.dataframe(df_f, use_container_width=True)
             if st.button("📤 Gerar Planilha Final"):
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_final.to_excel(writer, index=False, sheet_name="Pedidos")
-                output.seek(0)
-                st.success("✅ Planilha pronta!")
-                st.download_button("⬇️ Baixar Planilha", output, "pedidos.xlsx")
+                buf=BytesIO()
+                with pd.ExcelWriter(buf,engine='openpyxl') as w:
+                    df_f.to_excel(w,index=False,sheet_name="Pedidos")
+                buf.seek(0)
+                st.success("Planilha pronta!")
+                st.download_button("⬇️",buf,"pedidos.xlsx")
         else:
-            st.info("Nenhum pedido foi adicionado.")
+            st.info("Nenhum pedido adicionado.")
 
 # ========================= APP 3: TRANSFERÊNCIAS =========================
 def app_transferencias():
     st.header("📦 Transferência entre Lojas")
     st.divider()
-
     if "formulario_dados" not in st.session_state:
-        st.session_state.formulario_dados = []
-
-    lojas = ["MIMI", "KAMI", "TOTAL MIX", "E-COMMERCE"]
-    col1, col2 = st.columns(2)
-    de_loja = col1.selectbox("Loja de Origem", lojas)
-    para_loja = col2.selectbox("Loja de Destino", [l for l in lojas if l != de_loja])
-
+        st.session_state.formulario_dados=[]
+    lojas = ["MIMI","KAMI","TOTAL MIX","E-COMMERCE"]
+    c1,c2 = st.columns(2)
+    de_loja = c1.selectbox("Loja de Origem", lojas)
+    para_loja = c2.selectbox("Loja de Destino", [l for l in lojas if l!=de_loja])
     df = carregar_csv_combinado()
-    modo = st.radio("Modo:", ["Individual", "Lote"], horizontal=True)
-
-    if modo == "Lote":
+    modo = st.radio("Modo:", ["Individual","Lote"],horizontal=True)
+    if modo=="Lote":
         st.download_button("⬇️ Baixar Modelo", data=BytesIO(), file_name="modelo_transferencia.xlsx")
-        file = st.file_uploader("📤 Upload Planilha", type=["xlsx"])
-        if file:
-            df_lote = pd.read_excel(file)
-            for _, row in df_lote.iterrows():
+        up = st.file_uploader("📤 Upload Planilha", type=["xlsx"])
+        if up:
+            df_l = pd.read_excel(up)
+            for _,row in df_l.iterrows():
                 cod = str(row["CODIGO BARRA"]).strip()
                 qtd = int(row["QUANTIDADE"])
-                produto = buscar_produto(cod, "CODIGO BARRA", df)
-                if produto is not None:
+                prod = buscar_produto(cod, "CODIGO BARRA", df)
+                if prod:
                     st.session_state.formulario_dados.append({
                         "CODIGO BARRA": cod,
-                        "CODIGO": produto.get("CODIGO", ""),
-                        "FORNECEDOR": produto.get("FORNECEDOR", ""),
-                        "DESCRICAO": produto.get("DESCRICAO", ""),
+                        "CODIGO": prod.get("CODIGO",""),
+                        "FORNECEDOR": prod.get("FORNECEDOR",""),
+                        "DESCRICAO": prod.get("DESCRICAO",""),
                         "QUANTIDADE": qtd
                     })
-
     else:
-        tipo, val, qtd = st.columns([2, 3, 2])
-        busca_tipo = tipo.selectbox("Buscar por:", ["Código de Barras", "REF"])
-        busca_val = val.text_input("Valor:")
-        busca_qtd = qtd.number_input("Quantidade", min_value=1, step=1, value=1)
-
+        t,v,q = st.columns([2,3,2])
+        tipo = t.selectbox("Buscar por:", ["Código de Barras","REF"])
+        val = v.text_input("Valor:")
+        qtd = q.number_input("Quantidade",1,step=1,value=1)
         if st.button("➕ Adicionar Produto"):
-            col = "CODIGO BARRA" if busca_tipo == "Código de Barras" else "CODIGO"
-            produto = buscar_produto(busca_val, col, df)
-            if produto is not None:
+            col = "CODIGO BARRA" if tipo=="Código de Barras" else "CODIGO"
+            prod = buscar_produto(val, col, df)
+            if prod:
                 st.session_state.formulario_dados.append({
-                    "CODIGO BARRA": produto["CODIGO BARRA"],
-                    "CODIGO": produto["CODIGO"],
-                    "FORNECEDOR": produto["FORNECEDOR"],
-                    "DESCRICAO": produto["DESCRICAO"],
-                    "QUANTIDADE": busca_qtd
+                    "CODIGO BARRA": prod["CODIGO BARRA"],
+                    "CODIGO": prod["CODIGO"],
+                    "FORNECEDOR": prod["FORNECEDOR"],
+                    "DESCRICAO": prod["DESCRICAO"],
+                    "QUANTIDADE": qtd
                 })
-                st.toast("✅Produto adicionado com sucesso!")
-
+                st.toast("✅ Produto adicionado!")
     if st.session_state.formulario_dados:
-        df_form = pd.DataFrame(st.session_state.formulario_dados)
-        st.dataframe(df_form, use_container_width=True)
-        if st.button("📄 Gerar Relatório Transferência"):
+        df_f = pd.DataFrame(st.session_state.formulario_dados)
+        st.dataframe(df_f, use_container_width=True)
+        if st.button("📄 Gerar Relatório"):
             wb = load_workbook("FORMULÁRIO DE TRANSFERENCIA ENTRE LOJAS.xlsx")
             ws = wb.active
             ws["A4"] = f"DE: {de_loja}"
             ws["C4"] = para_loja
-            ws["D4"] = "DATA " + datetime.today().strftime("%d/%m/%Y")
-            for i, item in enumerate(st.session_state.formulario_dados[:30]):
-                ws[f"A{8+i}"] = item["CODIGO BARRA"]
-                ws[f"B{8+i}"] = item["CODIGO"]
-                ws[f"C{8+i}"] = item["FORNECEDOR"]
-                ws[f"D{8+i}"] = item["DESCRICAO"]
-                ws[f"E{8+i}"] = item["QUANTIDADE"]
-            buffer = BytesIO()
-            wb.save(buffer)
-            buffer.seek(0)
-            st.download_button("⬇️ Baixar Formulário Preenchido", buffer, "TRANSFERENCIA.xlsx")
+            ws["D4"] = "DATA " + dt.today().strftime("%d/%m/%Y")
+            for i,item in enumerate(st.session_state.formulario_dados[:30]):
+                r = 8+i
+                ws[f"A{r}"]=item["CODIGO BARRA"]
+                ws[f"B{r}"]=item["CODIGO"]
+                ws[f"C{r}"]=item["FORNECEDOR"]
+                ws[f"D{r}"]=item["DESCRICAO"]
+                ws[f"E{r}"]=item["QUANTIDADE"]
+            buf=BytesIO(); wb.save(buf); buf.seek(0)
+            st.download_button("⬇️ Baixar", buf, "TRANSFERENCIA.xlsx")
 
 # ========================= APP 4: PESQUISA DE PRODUTOS (API) =========================
 def app_pesquisa():
     st.header("🔍 Pesquisa de Produtos (API Varejo Fácil)")
     st.divider()
-    st.markdown("<p class='small-font' style='text-align: center;'>Consulta em tempo real na base do Varejo Fácil</p>", unsafe_allow_html=True)
-
-    codigo_barras = st.text_input("📦 Digite o código de barras do produto", placeholder="Ex: 7891234567890")
-
+    st.markdown("<p class='small-font'>Consulta em tempo real na base do Varejo Fácil</p>", unsafe_allow_html=True)
+    cod = st.text_input("📦 Código de barras", placeholder="Ex: 7891234567890")
     if st.button("🔎 Consultar Produto"):
-        if not codigo_barras.strip():
-            st.warning("⚠️ Por favor, digite um código de barras válido.")
+        if not cod.strip():
+            st.warning("Digite um código de barras válido.")
         else:
-            url_1 = f"https://lojasmimi.varejofacil.com/api/v1/produto/produtos/consulta/0{codigo_barras}"
-            headers = {
-                'x-api-key': st.secrets.api.x_api_key,
-                'Cookie': st.secrets.api.cookie
-            }
-            try:
-                response_1 = requests.get(url_1, headers=headers)
-                if response_1.status_code == 200:
-                    dados_produto = response_1.json()
-                    if 'id' in dados_produto and 'descricao' in dados_produto:
-                        produto_id = dados_produto['id']
-                        descricao = dados_produto['descricao']
-                        st.success("✅ Produto encontrado com sucesso!")
-                        st.markdown(f"<div class='big-font'><strong>📄 Descrição:</strong> {descricao}</div>", unsafe_allow_html=True)
-                        st.markdown(f"<div class='small-font'>🆔 ID do Produto: {produto_id}</div>", unsafe_allow_html=True)
-
-                        url_2 = f"https://lojasmimi.varejofacil.com/api/v1/produto/produtos/{produto_id}/precos"
-                        response_2 = requests.get(url_2, headers=headers)
-                        if response_2.status_code == 200:
-                            lista_precos = response_2.json()
-                            preco_loja_1 = next((item for item in lista_precos if item.get("lojaId") == 1), None)
-                            if preco_loja_1:
-                                preco_venda = preco_loja_1.get("precoVenda1", "N/A")
-                                custo = preco_loja_1.get("custoProduto", "N/A")
-                                with st.expander("💰 Ver detalhes de preço"):
-                                    st.write(f"**Preço de Venda:** R$ {preco_venda:.2f}" if isinstance(preco_venda, (int, float)) else f"**Preço de Venda:** {preco_venda}")
-                                    st.write(f"**Custo do Produto:** R$ {custo:.2f}" if isinstance(custo, (int, float)) else f"**Custo do Produto:** {custo}")
-                            else:
-                                st.info("ℹ️ Nenhuma informação de preço disponível para esta loja.")
+            url1 = f"https://lojasmimi.varejofacil.com/api/v1/produto/produtos/consulta/0{cod}"
+            hdr = {'x-api-key': st.secrets.api.x_api_key, 'Cookie': st.secrets.api.cookie}
+            r1 = requests.get(url1, headers=hdr)
+            if r1.status_code==200:
+                dp = r1.json()
+                if 'id' in dp and 'descricao' in dp:
+                    pid = dp['id']; desc = dp['descricao']
+                    st.success("✅ Produto encontrado!")
+                    st.markdown(f"<div class='big-font'><strong>📄 Descrição:</strong> {desc}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='small-font'>🆔 ID: {pid}</div>", unsafe_allow_html=True)
+                    r2 = requests.get(f"https://lojasmimi.varejofacil.com/api/v1/produto/produtos/{pid}/precos", headers=hdr)
+                    if r2.status_code==200:
+                        lp = r2.json()
+                        p1 = next((i for i in lp if i.get("lojaId")==1), None)
+                        if p1:
+                            v = p1.get("precoVenda1","N/A"); c = p1.get("custoProduto","N/A")
+                            with st.expander("💰 Preço e Custo"):
+                                st.write(f"**Preço de Venda:** R$ {v:.2f}" if isinstance(v,(int,float)) else f"**Preço de Venda:** {v}")
+                                st.write(f"**Custo:** R$ {c:.2f}" if isinstance(c,(int,float)) else f"**Custo:** {c}")
                         else:
-                            st.error(f"❌ Erro ao consultar preços: {response_2.status_code}")
+                            st.info("Sem dados de preço para esta loja.")
                     else:
-                        st.warning("🚫 Produto não encontrado ou dados incompletos.")
+                        st.error(f"Erro ao consultar preços: {r2.status_code}")
                 else:
-                    st.error(f"❌ Erro ao buscar produto: Código {response_1.status_code}")
-            except Exception as e:
-                st.exception(f"Erro inesperado: {e}")
+                    st.warning("Produto não encontrado ou dados incompletos.")
+            else:
+                st.error(f"Erro ao buscar produto: {r1.status_code}")
 
-# ========================= EXECUTAR OPERAÇÃO =========================
+# ========================= APP 5: ATUALIZADOR DE PREÇOS =========================
+def app_atualizador_precos():
+    st.header("🛠️ Atualizador de Preços")
+    st.markdown("Atualize preço de Venda ou Custo via API Varejo Fácil")
+    def fmt(c): return c.zfill(13) if len(c)<13 else c
+    def login(u,p):
+        r = requests.post("https://lojasmimi.varejofacil.com/api/auth",
+            headers={"Content-Type":"application/json"},
+            data=json.dumps({"username":u,"password":p}))
+        if r.status_code==200: return r.json().get("accessToken")
+    def obter_id(cb, tok):
+        r = requests.get(f"https://lojasmimi.varejofacil.com/api/v1/produto/produtos/consulta/0{cb}",
+            headers={"Authorization":tok})
+        if r.status_code==200:
+            d=r.json(); return d.get("id"),d.get("descricao")
+    def obter_custos(pid, tok):
+        r = requests.get(f"https://lojasmimi.varejofacil.com/api/v1/produto/produtos/{pid}/precos",
+            headers={"Authorization":tok})
+        if r.status_code==200: return r.json()
+    def atualiza(custos, novo, tipo, tok):
+        data=dt.now().astimezone().isoformat(); ok=[]
+        for c in custos:
+            if c['lojaId'] in [1,2,5]:
+                pld={k:c.get(k) for k in ["id","lojaId","produtoId",
+                    "precoVenda1","custoProduto","precoMedioDeReposicao","precoFiscalDeReposicao"]}
+                pld["dataUltimoReajustePreco1"]=data
+                if tipo=="Venda": pld["precoVenda1"]=novo
+                else:
+                    pld["custoProduto"]=novo
+                    pld["precoMedioDeReposicao"]=novo
+                    pld["precoFiscalDeReposicao"]=novo
+                r = requests.put(f"https://lojasmimi.varejofacil.com/api/v1/produto/precos/{c['id']}",
+                    headers={"Content-Type":"application/json","Authorization":tok},
+                    data=json.dumps(pld))
+                if r.status_code==200: ok.append(c['lojaId'])
+        return ok
+
+    if "access_token" not in st.session_state:
+        st.subheader("🔐 Login")
+        u = st.text_input("Usuário")
+        p = st.text_input("Senha", type="password")
+        if st.button("Entrar"):
+            with st.spinner("Validando..."):
+                t=login(u,p)
+            if t: st.session_state.update(access_token=t, usuario=u); st.success("✅ Logado!"); st.rerun()
+            else: st.error("Credenciais inválidas.")
+    else:
+        st.success(f"Usuário: {st.session_state.usuario}")
+        if st.button("🚪 Sair"):
+            st.session_state.pop("access_token", None); st.session_state.pop("usuario", None); st.rerun()
+        st.divider()
+        col1, col2 = st.columns(2)
+        metodo = col1.selectbox("Buscar por", ["Código de Barras","ProdutoId"])
+        tipo = col2.selectbox("Tipo de atualização", ["Venda","Custo"])
+        entr = st.text_input(f"Insira {metodo}")
+        if entr:
+            if metodo=="Código de Barras":
+                cb = fmt(entr)
+                pid, desc = obter_id(cb, st.session_state.access_token)
+            else:
+                try:
+                    pid = int(entr); desc=f"Produto ID {pid}"
+                except:
+                    st.error("ID inválido."); return
+            if pid:
+                st.write(f"**Produto:** {desc}")
+                custos = obter_custos(pid, st.session_state.access_token)
+                if custos:
+                    dfc = pd.DataFrame([{"Loja":c['lojaId'], "Preço Venda":c.get("precoVenda1",0),
+                        "Custo":c.get("custoProduto",0)} for c in custos if c['lojaId'] in [1,2,5]])
+                    st.dataframe(dfc, use_container_width=True)
+                    novo = st.number_input("Novo valor (R$)", min_value=0.0, step=0.01)
+                    if st.button("Atualizar Preço"):
+                        ok = atualiza(custos, novo, tipo, st.session_state.access_token)
+                        if ok: st.success(f"✅ Atualizado em lojas: {', '.join(map(str, ok))}")
+                        else: st.warning("Nenhuma loja atualizada.")
+                else:
+                    st.error("Não foi possível obter preços.")
+            else:
+                st.error("Produto não encontrado.")
+
+# ========================= ROTEAMENTO =========================
 if menu == "♻️ Processo de Trocas":
     app_trocas()
 elif menu == "🛍️ Processo de Pedidos":
@@ -400,6 +422,8 @@ elif menu == "📦 Transferência entre Lojas":
     app_transferencias()
 elif menu == "🔍 Pesquisa de Produtos":
     app_pesquisa()
+elif menu == "🛠️ Atualizador de Preços":
+    app_atualizador_precos()
 
 # ========================= RODAPÉ =========================
 st.markdown("""
