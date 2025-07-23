@@ -165,67 +165,108 @@ def app_trocas():
 def app_pedidos():
     st.header("🛍️ Processo de Pedidos")
     st.divider()
+    
     if "produtos_solicitados" not in st.session_state:
-        st.session_state.produtos_solicitados=[]
+        st.session_state.produtos_solicitados = []
+
     df = carregar_csv_combinado()
-    aba1,aba2,aba3 = st.tabs(["🧍 Individual","📂 Lote","📋 Revisão"])
+    aba1, aba2, aba3 = st.tabs(["🧍 Individual", "📂 Lote", "📋 Revisão"])
+
+    # --- Aba 1: Individual ---
     with aba1:
         forn = st.selectbox("Fornecedor:", sorted(df["FORNECEDOR"].dropna().unique()))
-        tipo = st.selectbox("Buscar por:", ["CÓDIGO DE BARRAS","REF"])
-        col = "CODIGO BARRA" if tipo=="CÓDIGO DE BARRAS" else "CODIGO"
-        df_f = df[df["FORNECEDOR"]==forn]
+        tipo = st.selectbox("Buscar por:", ["CÓDIGO DE BARRAS", "REF"])
+        col = "CODIGO BARRA" if tipo == "CÓDIGO DE BARRAS" else "CODIGO"
+        df_f = df[df["FORNECEDOR"] == forn]
         opc = st.selectbox("Produto:", sorted(df_f[col].dropna().unique()))
-        qtd = st.number_input("Quantidade:",1,step=1)
+        qtd = st.number_input("Quantidade:", 1, step=1)
+
         if st.button("➕ Adicionar Pedido"):
-            prod = df_f[df_f[col]==opc]
+            prod = df_f[df_f[col] == opc]
             if not prod.empty:
-                p=prod.iloc[0]
-                it={"FORNECEDOR":forn,"CODIGO BARRA":p["CODIGO BARRA"],"CODIGO":p["CODIGO"],
-                    "DESCRICAO":p["DESCRICAO"],"QTD":qtd,"ORIGEM":p.get("__ORIGEM_PLANILHA__","")}
+                p = prod.iloc[0]
+                it = {
+                    "FORNECEDOR": forn,
+                    "CODIGO BARRA": p["CODIGO BARRA"],
+                    "CODIGO": p["CODIGO"],
+                    "DESCRICAO": p["DESCRICAO"],
+                    "QTD": qtd,
+                    "ORIGEM": p.get("__ORIGEM_PLANILHA__", "")
+                }
                 st.session_state.produtos_solicitados.append(it)
                 st.toast("✅ Produto adicionado!")
             else:
                 st.error("Produto não encontrado.")
+
+    # --- Aba 2: Lote ---
     with aba2:
-        c1,c2 = st.columns(2)
+        c1, c2 = st.columns(2)
         if c1.button("📥 Baixar Modelo Excel"):
-            modelo = pd.DataFrame(columns=["CODIGO BARRA","CODIGO","QTD"])
-            buf=BytesIO()
+            modelo = pd.DataFrame(columns=["CODIGO BARRA", "CODIGO", "QTD"])
+            buf = BytesIO()
             with pd.ExcelWriter(buf, engine='openpyxl') as w:
-                modelo.to_excel(w,index=False,sheet_name="Modelo")
+                modelo.to_excel(w, index=False, sheet_name="Modelo")
             buf.seek(0)
-            st.download_button("⬇️",buf,"modelo_pedido.xlsx")
+            st.download_button("⬇️", buf, "modelo_pedido.xlsx")
+
+        fornecedor_lote = c2.selectbox("Fornecedor para Lote:", sorted(df["FORNECEDOR"].dropna().unique()))
         arq = c2.file_uploader("📤 Enviar Excel", type=["xlsx"])
-        tipo_col = st.selectbox("Usar como identificador:", ["CÓDIGO DE BARRAS","REF"])
-        col_id = "CODIGO BARRA" if tipo_col=="CÓDIGO DE BARRAS" else "CODIGO"
+        tipo_col = st.selectbox("Usar como identificador:", ["CÓDIGO DE BARRAS", "REF"])
+        col_id = "CODIGO BARRA" if tipo_col == "CÓDIGO DE BARRAS" else "CODIGO"
+
         if arq:
             wb = load_workbook(filename=BytesIO(arq.read()))
             ws = wb.active
             data = ws.values
             cols = next(data)
             df_l = pd.DataFrame(data, columns=cols).fillna("")
-            for _,row in df_l.iterrows():
-                cod = str(row.get(col_id,"")).strip()
-                qtd = int(str(row.get("QTD","0")).strip())
-                prod = df[df[col_id]==cod]
+
+            # Filtro apenas produtos do fornecedor selecionado
+            df_forn = df[df["FORNECEDOR"] == fornecedor_lote]
+            qtd_faltante = False
+
+            for _, row in df_l.iterrows():
+                cod = str(row.get(col_id, "")).strip()
+                qtd_raw = str(row.get("QTD", "")).strip()
+
+                # Verifica se quantidade está presente e válida
+                if not qtd_raw.isdigit():
+                    qtd_faltante = True
+                    continue  # pula o item com quantidade inválida
+
+                qtd = int(qtd_raw)
+                prod = df_forn[df_forn[col_id] == cod]
+
                 if not prod.empty:
-                    p=prod.iloc[0]
-                    it={"FORNECEDOR":p["FORNECEDOR"],"CODIGO BARRA":p["CODIGO BARRA"],
-                        "CODIGO":p["CODIGO"],"DESCRICAO":p["DESCRICAO"],
-                        "QTD":qtd,"ORIGEM":p.get("__ORIGEM_PLANILHA__","")}
+                    p = prod.iloc[0]
+                    it = {
+                        "FORNECEDOR": p["FORNECEDOR"],
+                        "CODIGO BARRA": p["CODIGO BARRA"],
+                        "CODIGO": p["CODIGO"],
+                        "DESCRICAO": p["DESCRICAO"],
+                        "QTD": qtd,
+                        "ORIGEM": p.get("__ORIGEM_PLANILHA__", "")
+                    }
                     st.session_state.produtos_solicitados.append(it)
-            st.toast("✅ Produtos adicionados!")
+
+            if qtd_faltante:
+                st.warning("⚠️ Há valores faltantes ou inválidos na coluna QTD. Os itens com erro foram ignorados.")
+            else:
+                st.toast("✅ Produtos adicionados!")
+
+    # --- Aba 3: Revisão ---
     with aba3:
         if st.session_state.produtos_solicitados:
             df_f = pd.DataFrame(st.session_state.produtos_solicitados)
             st.dataframe(df_f, use_container_width=True)
+
             if st.button("📤 Gerar Planilha Final"):
-                buf=BytesIO()
-                with pd.ExcelWriter(buf,engine='openpyxl') as w:
-                    df_f.to_excel(w,index=False,sheet_name="Pedidos")
+                buf = BytesIO()
+                with pd.ExcelWriter(buf, engine='openpyxl') as w:
+                    df_f.to_excel(w, index=False, sheet_name="Pedidos")
                 buf.seek(0)
                 st.success("Planilha pronta!")
-                st.download_button("⬇️",buf,"pedidos.xlsx")
+                st.download_button("⬇️", buf, "pedidos.xlsx")
         else:
             st.info("Nenhum pedido adicionado.")
 
