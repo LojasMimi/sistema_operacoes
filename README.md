@@ -1,19 +1,23 @@
+
 # 🧠 Sistema de Operações – Lojas MIMI
 
-**Versão:** 2.0
+**Versão:** 3.0
 **Desenvolvedor:** Pablo
 **Última atualização:** 2025
 
+---
+
 ## 📦 Visão Geral
 
-O **Sistema de Operações – Lojas MIMI** é um aplicativo web desenvolvido com Python e Streamlit para unificar e digitalizar processos logísticos internos das unidades da rede:
+O **Sistema de Operações – Lojas MIMI** é um sistema web interno desenvolvido em **Python + Streamlit**, criado para integrar e digitalizar os principais processos logísticos e comerciais da rede Lojas MIMI. A versão 3.0 consolida as rotinas administrativas mais importantes da empresa em um único painel operacional.
 
-* Processo de **Trocas** com fornecedores
-* Solicitação de **Pedidos** pelas unidades
-* **Transferência de produtos** entre lojas
-* **Pesquisa de Produtos** na base corporativa
+### 🔧 Módulos incluídos:
 
-A aplicação centraliza essas funcionalidades em uma interface intuitiva, segura e com geração automática de planilhas integráveis ao sistema interno da empresa.
+* **♻️ Trocas com Fornecedores**
+* **🛍️ Pedidos das Lojas**
+* **📦 Transferência entre Lojas**
+* **🔍 Pesquisa de Produtos**
+* **🛠️ Atualizador de Preços (NOVO)**
 
 ---
 
@@ -21,62 +25,65 @@ A aplicação centraliza essas funcionalidades em uma interface intuitiva, segur
 
 ### ♻️ Processo de Trocas
 
-* Busca de produtos por código de barras ou referência (REF)
-* Adição de produtos com controle de fornecedor único
-* Geração automática de formulário de troca em Excel
-* Preenchimento direto em template padrão: `FORM-TROCAS.xlsx`
+* Busca por código de barras ou REF
+* Inclusão individual ou por lote via planilha Excel
+* Validação automática e controle de fornecedor único
+* Geração automática do formulário padrão `FORM-TROCAS.xlsx`
 
 ### 🛍️ Processo de Pedidos
 
-* Filtragem por fornecedor e busca de produtos por código/REF
-* Adição individual ou em lote via upload de Excel
-* Geração de planilha final com pedidos solicitados
-* Pronto para integração com sistema (CADIMPORT, CADPRO, CADPLA)
+* Busca por código de barras ou REF, filtrada por fornecedor
+* Adição de produtos manualmente ou em lote via Excel
+* Geração de planilha final pronta para importação (CADIMPORT, CADPRO, CADPLA)
 
 ### 📦 Transferência entre Lojas
 
-* Seleção de loja de origem e destino
-* Cadastro de transferências individual ou em lote via Excel
-* Geração de relatórios em template padrão: `FORMULÁRIO DE TRANSFERENCIA ENTRE LOJAS.xlsx`
+* Escolha da loja de origem e destino
+* Adição de produtos individualmente ou por planilha
+* Geração automática do modelo `FORMULÁRIO DE TRANSFERENCIA ENTRE LOJAS.xlsx`
 
-### 🔍 Pesquisa de Produtos (**Novo na versão 2.0**)
+### 🔍 Pesquisa de Produtos
 
-* Busca de produtos diretamente na base corporativa
-* Suporte a múltiplos tipos de código: Código de Barras, Código VF e REF
+* Consulta ao **catálogo corporativo padronizado**
+* Busca por código de barras, código VF ou REF
 * Resultados apresentados diretamente na interface
-* Fonte oficial e centralizada: planilha `cad_concatenado.csv` hospedada no GitHub
+* Fonte: planilha `cad_concatenado.csv` hospedada no GitHub
+
+### 🛠️ Atualizador de Preços (**NOVO na versão 3.0**)
+
+* Login via API do **Varejo Fácil**
+* Consulta e atualização de **preço de venda** e **custo** por produto
+* Suporte a busca por código de barras ou ID de produto
+* Atualizações aplicadas diretamente nas lojas cadastradas (IDs: 1, 2, 5)
 
 ---
 
 ## ⚙️ Como Executar
 
-### Pré-requisitos
+### 🔧 Pré-requisitos
 
 * Python 3.8 ou superior
-* Pacotes:
+* Instalar os pacotes:
+
+  ```bash
+  pip install -r requirements.txt
+  ```
+
+  Pacotes principais:
 
   * `streamlit`
   * `pandas`
   * `openpyxl`
   * `Pillow`
+  * `requests`
 
-### Instalação
-
-Clone o repositório e instale as dependências:
-
-```bash
-git clone https://github.com/LojasMimi/sistema-operacoes.git
-cd sistema-operacoes
-pip install -r requirements.txt
-```
-
-### Execução
+### ▶️ Execução
 
 ```bash
 streamlit run teste_apps_unificados.py
 ```
 
-Abra [http://localhost:8501](http://localhost:8501) no navegador.
+Abra o navegador em: [http://localhost:8501](http://localhost:8501)
 
 ---
 
@@ -87,38 +94,50 @@ sistema-operacoes/
 ├── teste_apps_unificados.py              # Código principal da aplicação
 ├── requirements.txt                      # Lista de dependências
 ├── logo_lojas_mimi.jpeg                  # Logotipo da aplicação
-├── FORM-TROCAS.xlsx                      # Template de formulário de trocas
+├── FORM-TROCAS.xlsx                      # Template de trocas
 ├── FORMULÁRIO DE TRANSFERENCIA...xlsx    # Template de transferências
 ```
 
 ---
 
-## 🔒 Segurança
+## 🔐 Segurança
 
-* Nenhum dado é enviado para servidores externos
-* Toda a operação é local e executada na memória do sistema
-* Os arquivos gerados são baixados diretamente pelo navegador
+* Todos os dados são processados **localmente**
+* Nenhuma informação sensível é enviada a servidores externos, exceto quando necessário via API segura do Varejo Fácil
+* Geração e download de arquivos feita diretamente no navegador
 
 ---
 
-## 🧠 Observações Técnicas
+## 🔍 Integrações
 
-* O sistema usa `st.session_state` para manter o estado da aplicação
-* Suporta adição incremental de produtos sem duplicações
-* Utiliza planilha de catálogo padronizada hospedada em:
-  [cad\_concatenado.csv (GitHub)](https://raw.githubusercontent.com/LojasMimi/transferencia_loja/refs/heads/main/cad_concatenado.csv)
-* A nova funcionalidade de **Pesquisa de Produtos** utiliza essa planilha para busca direta na interface
+* **Varejo Fácil API**
+
+  * Utilizada para consulta e atualização de produtos e preços
+  * Acesso autenticado via `accessToken` seguro
+* **Planilha de Catálogo Centralizado**
+
+  * [cad\_concatenado.csv (GitHub)](https://raw.githubusercontent.com/LojasMimi/transferencia_loja/refs/heads/main/cad_concatenado.csv)
+
+---
+
+## 📌 Observações Técnicas
+
+* Utiliza `st.session_state` para manter o estado entre interações
+* Geração dinâmica de arquivos Excel com `openpyxl`
+* Interface otimizada com HTML/CSS para melhor usabilidade
+* Compatível com múltiplos tipos de identificadores de produto
 
 ---
 
 ## 🛠️ Desenvolvimento
 
-Este sistema foi desenvolvido por **Pablo** para uso interno das **Lojas MIMI**, com o objetivo de melhorar a rastreabilidade, eficiência e segurança dos processos operacionais.
+Este sistema foi desenvolvido por **Pablo** para uso interno das **Lojas MIMI**, com o objetivo de **automatizar processos operacionais**, **reduzir erros manuais** e **melhorar a integração entre lojas e colaboradores**.
 
 ---
 
 ## 📝 Licença
 
-**Privado** — Este sistema é de uso exclusivo das Lojas MIMI.
+**Privado** — Sistema de uso exclusivo das Lojas MIMI.
 © 2025 Lojas MIMI – Todos os direitos reservados.
+
 
