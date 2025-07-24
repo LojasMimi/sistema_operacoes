@@ -54,7 +54,8 @@ menu = st.sidebar.radio(
         "🛍️ Processo de Pedidos",
         "📦 Transferência entre Lojas",
         "🔍 Pesquisa de Produtos",
-        "🛠️ Atualizador de Preços"
+        "🛠️ Atualizador de Preços",
+        "🔎 Procura de Fornecedor"  
     ]
 )
 st.title("🧠 Sistema de Operações - Lojas MIMI")
@@ -525,6 +526,35 @@ def app_atualizador_precos():
             else:
                 st.error("Produto não encontrado.")
 
+# ========================= APP 6: PROCURA DE FORNECEDOR =========================
+
+def app_procura_fornecedor():
+    st.header("🔎 Procura de Fornecedor")
+    st.divider()
+    
+    df = carregar_csv_combinado()
+    
+    if "__ORIGEM_PLANILHA__" not in df.columns:
+        st.error("A coluna '__ORIGEM_PLANILHA__' não foi encontrada no dataset.")
+        return
+
+    fornecedores = sorted(df["FORNECEDOR"].dropna().unique())
+    selecionados = st.multiselect("Selecione os fornecedores que deseja localizar:", fornecedores)
+
+    if selecionados:
+        resultado = (
+            df[df["FORNECEDOR"].isin(selecionados)][["FORNECEDOR", "__ORIGEM_PLANILHA__"]]
+            .drop_duplicates()
+            .sort_values(by="FORNECEDOR")
+            .rename(columns={"__ORIGEM_PLANILHA__": "PLANILHA DE ORIGEM"})
+        )
+
+        st.subheader(f"📍 Origem dos fornecedores selecionados ({len(resultado)})")
+        st.dataframe(resultado, use_container_width=True)
+    else:
+        st.info("Selecione ao menos um fornecedor para visualizar as origens.")
+
+
 # ========================= ROTEAMENTO =========================
 if menu == "♻️ Processo de Trocas":
     app_trocas()
@@ -536,6 +566,8 @@ elif menu == "🔍 Pesquisa de Produtos":
     app_pesquisa()
 elif menu == "🛠️ Atualizador de Preços":
     app_atualizador_precos()
+elif menu == "🔎 Procura de Fornecedor":
+    app_procura_fornecedor()
 
 # ========================= RODAPÉ =========================
 st.markdown("""
