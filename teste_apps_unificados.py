@@ -363,7 +363,7 @@ def app_transferencias():
                 cod = str(row["CODIGO BARRA"]).strip()
                 qtd = int(row["QUANTIDADE"])
                 prod = buscar_produto(cod, "CODIGO BARRA", df)
-                if prod:
+                if prod is not None:
                     st.session_state.formulario_dados.append({
                         "CODIGO BARRA": cod,
                         "CODIGO": prod.get("CODIGO",""),
