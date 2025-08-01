@@ -379,7 +379,7 @@ def app_transferencias():
         if st.button("➕ Adicionar Produto"):
             col = "CODIGO BARRA" if tipo=="Código de Barras" else "CODIGO"
             prod = buscar_produto(val, col, df)
-            if prod:
+            if prod is not None:
                 st.session_state.formulario_dados.append({
                     "CODIGO BARRA": prod["CODIGO BARRA"],
                     "CODIGO": prod["CODIGO"],
