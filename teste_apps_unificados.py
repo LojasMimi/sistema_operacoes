@@ -354,23 +354,31 @@ def app_transferencias():
     para_loja = c2.selectbox("Loja de Destino", [l for l in lojas if l!=de_loja])
     df = carregar_csv_combinado()
     modo = st.radio("Modo:", ["Individual","Lote"],horizontal=True)
-    if modo=="Lote":
-        st.download_button("⬇️ Baixar Modelo", data=BytesIO(), file_name="modelo_transferencia.xlsx")
+    if modo == "Lote":
+        if st.button("📥 Baixar Modelo Excel"):
+            modelo = pd.DataFrame(columns=["CODIGO BARRA", "QUANTIDADE"])
+            buf = BytesIO()
+            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+                modelo.to_excel(writer, index=False, sheet_name="Transferencia")
+            buf.seek(0)
+            st.download_button("⬇️ Baixar Modelo", data=buf, file_name="modelo_transferencia.xlsx")
+
         up = st.file_uploader("📤 Upload Planilha", type=["xlsx"])
         if up:
             df_l = pd.read_excel(up)
-            for _,row in df_l.iterrows():
+            for _, row in df_l.iterrows():
                 cod = str(row["CODIGO BARRA"]).strip()
                 qtd = int(row["QUANTIDADE"])
                 prod = buscar_produto(cod, "CODIGO BARRA", df)
                 if prod is not None:
                     st.session_state.formulario_dados.append({
                         "CODIGO BARRA": cod,
-                        "CODIGO": prod.get("CODIGO",""),
-                        "FORNECEDOR": prod.get("FORNECEDOR",""),
-                        "DESCRICAO": prod.get("DESCRICAO",""),
+                        "CODIGO": prod.get("CODIGO", ""),
+                        "FORNECEDOR": prod.get("FORNECEDOR", ""),
+                        "DESCRICAO": prod.get("DESCRICAO", ""),
                         "QUANTIDADE": qtd
                     })
+
     else:
         t,v,q = st.columns([2,3,2])
         tipo = t.selectbox("Buscar por:", ["Código de Barras","REF"])
