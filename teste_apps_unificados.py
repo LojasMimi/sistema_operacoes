@@ -457,78 +457,121 @@ def app_pesquisa():
 def app_atualizador_precos():
     st.header("🛠️ Atualizador de Preços")
     st.markdown("Atualize preço de Venda ou Custo via API Varejo Fácil")
-    def fmt(c): return c.zfill(13) if len(c)<13 else c
-    def login(u,p):
+
+    def fmt(c): return c.zfill(13) if len(c) < 13 else c
+
+    def login(u, p):
         r = requests.post("https://lojasmimi.varejofacil.com/api/auth",
-            headers={"Content-Type":"application/json"},
-            data=json.dumps({"username":u,"password":p}))
-        if r.status_code==200: return r.json().get("accessToken")
+                          headers={"Content-Type": "application/json"},
+                          data=json.dumps({"username": u, "password": p}))
+        if r.status_code == 200:
+            return r.json().get("accessToken")
+
     def obter_id(cb, tok):
         r = requests.get(f"https://lojasmimi.varejofacil.com/api/v1/produto/produtos/consulta/0{cb}",
-            headers={"Authorization":tok})
-        if r.status_code==200:
-            d=r.json(); return d.get("id"),d.get("descricao")
+                         headers={"Authorization": tok})
+        if r.status_code == 200:
+            d = r.json()
+            return d.get("id"), d.get("descricao")
+
     def obter_custos(pid, tok):
         r = requests.get(f"https://lojasmimi.varejofacil.com/api/v1/produto/produtos/{pid}/precos",
-            headers={"Authorization":tok})
-        if r.status_code==200: return r.json()
+                         headers={"Authorization": tok})
+        if r.status_code == 200:
+            return r.json()
+
     def atualiza(custos, novo, tipo, tok):
-        data=dt.now().astimezone().isoformat(); ok=[]
-        for c in custos:
-            if c['lojaId'] in [1,2,5]:
-                pld={k:c.get(k) for k in ["id","lojaId","produtoId",
-                    "precoVenda1","custoProduto","precoMedioDeReposicao","precoFiscalDeReposicao"]}
-                pld["dataUltimoReajustePreco1"]=data
-                if tipo=="Venda": pld["precoVenda1"]=novo
-                else:
-                    pld["custoProduto"]=novo
-                    pld["precoMedioDeReposicao"]=novo
-                    pld["precoFiscalDeReposicao"]=novo
-                r = requests.put(f"https://lojasmimi.varejofacil.com/api/v1/produto/precos/{c['id']}",
-                    headers={"Content-Type":"application/json","Authorization":tok},
-                    data=json.dumps(pld))
-                if r.status_code==200: ok.append(c['lojaId'])
+        data = dt.now().astimezone().isoformat()
+        ok = []
+        if tipo == "Venda":
+            for c in custos:
+                if c['lojaId'] in [1, 2, 5]:
+                    pld = {k: c.get(k) for k in ["id", "lojaId", "produtoId",
+                                                 "precoVenda1", "custoProduto",
+                                                 "precoMedioDeReposicao", "precoFiscalDeReposicao"]}
+                    pld["dataUltimoReajustePreco1"] = data
+                    pld["precoVenda1"] = novo
+                    r = requests.put(f"https://lojasmimi.varejofacil.com/api/v1/produto/precos/{c['id']}",
+                                     headers={"Content-Type": "application/json", "Authorization": tok},
+                                     data=json.dumps(pld))
+                    if r.status_code == 200:
+                        ok.append(c['lojaId'])
+        else:  # tipo == "Custo"
+            for c in custos:
+                if c['lojaId'] in [1, 2, 5]:
+                    pld = {
+                        "id": c["id"],
+                        "lojaId": c["lojaId"],
+                        "produtoId": c["produtoId"],
+                        "custoReposicao": novo,
+                        "custoMedio": novo,
+                        "custoFiscal": novo
+                    }
+                    r = requests.put(f"https://lojasmimi.varejofacil.com/api/v1/produto/custos/{c['id']}",
+                                     headers={"Content-Type": "application/json", "Authorization": tok},
+                                     data=json.dumps(pld))
+                    if r.status_code == 200:
+                        ok.append(c['lojaId'])
         return ok
 
+    # Interface de login
     if "access_token" not in st.session_state:
         st.subheader("🔐 Login")
         u = st.text_input("Usuário")
         p = st.text_input("Senha", type="password")
         if st.button("Entrar"):
             with st.spinner("Validando..."):
-                t=login(u,p)
-            if t: st.session_state.update(access_token=t, usuario=u); st.success("✅ Logado!"); st.rerun()
-            else: st.error("Credenciais inválidas.")
+                t = login(u, p)
+            if t:
+                st.session_state.update(access_token=t, usuario=u)
+                st.success("✅ Logado!")
+                st.rerun()
+            else:
+                st.error("Credenciais inválidas.")
     else:
         st.success(f"Usuário: {st.session_state.usuario}")
         if st.button("🚪 Sair"):
-            st.session_state.pop("access_token", None); st.session_state.pop("usuario", None); st.rerun()
+            st.session_state.pop("access_token", None)
+            st.session_state.pop("usuario", None)
+            st.rerun()
+
         st.divider()
         col1, col2 = st.columns(2)
-        metodo = col1.selectbox("Buscar por", ["Código de Barras","ProdutoId"])
-        tipo = col2.selectbox("Tipo de atualização", ["Venda","Custo"])
+        metodo = col1.selectbox("Buscar por", ["Código de Barras", "ProdutoId"])
+        tipo = col2.selectbox("Tipo de atualização", ["Venda", "Custo"])
         entr = st.text_input(f"Insira {metodo}")
+
         if entr:
-            if metodo=="Código de Barras":
+            if metodo == "Código de Barras":
                 cb = fmt(entr)
                 pid, desc = obter_id(cb, st.session_state.access_token)
             else:
                 try:
-                    pid = int(entr); desc=f"Produto ID {pid}"
+                    pid = int(entr)
+                    desc = f"Produto ID {pid}"
                 except:
-                    st.error("ID inválido."); return
+                    st.error("ID inválido.")
+                    return
+
             if pid:
                 st.write(f"**Produto:** {desc}")
                 custos = obter_custos(pid, st.session_state.access_token)
                 if custos:
-                    dfc = pd.DataFrame([{"Loja":c['lojaId'], "Preço Venda":c.get("precoVenda1",0),
-                        "Custo":c.get("custoProduto",0)} for c in custos if c['lojaId'] in [1,2,5]])
+                    dfc = pd.DataFrame([{
+                        "Loja": c['lojaId'],
+                        "Preço Venda": c.get("precoVenda1", 0),
+                        "Custo": c.get("custoProduto", 0)
+                    } for c in custos if c['lojaId'] in [1, 2, 5]])
                     st.dataframe(dfc, use_container_width=True)
+
                     novo = st.number_input("Novo valor (R$)", min_value=0.0, step=0.01)
+
                     if st.button("Atualizar Preço"):
                         ok = atualiza(custos, novo, tipo, st.session_state.access_token)
-                        if ok: st.success(f"✅ Atualizado em lojas: {', '.join(map(str, ok))}")
-                        else: st.warning("Nenhuma loja atualizada.")
+                        if ok:
+                            st.success(f"✅ Atualizado em lojas: {', '.join(map(str, ok))}")
+                        else:
+                            st.warning("Nenhuma loja atualizada.")
                 else:
                     st.error("Não foi possível obter preços.")
             else:
