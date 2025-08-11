@@ -344,76 +344,129 @@ def app_pedidos():
 
 # ========================= APP 3: TRANSFERÊNCIAS =========================
 def app_transferencias():
-    st.header("📦 Transferência entre Lojas")
-    st.divider()
-    if "formulario_dados" not in st.session_state:
-        st.session_state.formulario_dados=[]
-    lojas = ["MIMI","KAMI","TOTAL MIX","E-COMMERCE"]
-    c1,c2 = st.columns(2)
-    de_loja = c1.selectbox("Loja de Origem", lojas)
-    para_loja = c2.selectbox("Loja de Destino", [l for l in lojas if l!=de_loja])
-    df = carregar_csv_combinado()
-    modo = st.radio("Modo:", ["Individual","Lote"],horizontal=True)
-    if modo == "Lote":
-        if st.button("📥 Baixar Modelo Excel"):
-            modelo = pd.DataFrame(columns=["CODIGO BARRA", "QUANTIDADE"])
-            buf = BytesIO()
-            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-                modelo.to_excel(writer, index=False, sheet_name="Transferencia")
-            buf.seek(0)
-            st.download_button("⬇️ Baixar Modelo", data=buf, file_name="modelo_transferencia.xlsx")
+    st.title("🔁 Transferência Entre Lojas")
+    st.markdown("Utilize esta ferramenta para gerar e conferir transferências entre lojas.")
 
-        up = st.file_uploader("📤 Upload Planilha", type=["xlsx"])
-        if up:
-            df_l = pd.read_excel(up)
-            for _, row in df_l.iterrows():
-                cod = str(row["CODIGO BARRA"]).strip()
-                qtd = int(row["QUANTIDADE"])
-                prod = buscar_produto(cod, "CODIGO BARRA", df)
-                if prod is not None:
-                    st.session_state.formulario_dados.append({
-                        "CODIGO BARRA": cod,
-                        "CODIGO": prod.get("CODIGO", ""),
-                        "FORNECEDOR": prod.get("FORNECEDOR", ""),
-                        "DESCRICAO": prod.get("DESCRICAO", ""),
-                        "QUANTIDADE": qtd
-                    })
+    st.subheader("📦 Gerar Transferência")
 
-    else:
-        t,v,q = st.columns([2,3,2])
-        tipo = t.selectbox("Buscar por:", ["Código de Barras","REF"])
-        val = v.text_input("Valor:")
-        qtd = q.number_input("Quantidade",1,step=1,value=1)
-        if st.button("➕ Adicionar Produto"):
-            col = "CODIGO BARRA" if tipo=="Código de Barras" else "CODIGO"
-            prod = buscar_produto(val, col, df)
-            if prod is not None:
-                st.session_state.formulario_dados.append({
-                    "CODIGO BARRA": prod["CODIGO BARRA"],
-                    "CODIGO": prod["CODIGO"],
-                    "FORNECEDOR": prod["FORNECEDOR"],
-                    "DESCRICAO": prod["DESCRICAO"],
-                    "QUANTIDADE": qtd
-                })
-                st.toast("✅ Produto adicionado!")
-    if st.session_state.formulario_dados:
-        df_f = pd.DataFrame(st.session_state.formulario_dados)
-        st.dataframe(df_f, use_container_width=True)
-        if st.button("📄 Gerar Relatório"):
-            wb = load_workbook("FORMULÁRIO DE TRANSFERENCIA ENTRE LOJAS.xlsx")
+    nome_loja = st.text_input("Nome da Loja Remetente")
+    loja_destino = st.text_input("Nome da Loja Destino")
+
+    st.markdown("Insira os itens para a transferência:")
+
+    data = st.data_editor(
+        pd.DataFrame(columns=["CODIGO BARRA", "CODIGO", "FORNECEDOR", "DESCRICAO", "QTDE"]),
+        num_rows="dynamic",
+        use_container_width=True
+    )
+
+    if st.button("📤 Gerar Planilha de Transferência"):
+        if nome_loja and loja_destino and not data.empty:
+            wb = Workbook()
             ws = wb.active
-            ws["A4"] = f"DE: {de_loja}"
-            ws["C4"] = para_loja
-            ws["D4"] = "DATA " + dt.today().strftime("%d/%m/%Y")
-            for i,item in enumerate(st.session_state.formulario_dados[:30]):
-                r = 8+i
-                ws[f"A{r}"]=item["CODIGO BARRA"]
-                ws[f"B{r}"]=item["CODIGO"]
-                ws[f"C{r}"]=item["FORNECEDOR"]
-                ws[f"D{r}"]=item["DESCRICAO"]
-                ws[f"E{r}"]=item["QUANTIDADE"]
-            buf=BytesIO(); wb.save(buf); buf.seek(0)
-            st.download_button("⬇️ Baixar", buf, "TRANSFERENCIA.xlsx")
+            ws.title = "Transferência"
+
+            ws.merge_cells("A1:E1")
+            ws["A1"] = "FORMULÁRIO DE TRANSFERENCIA ENTRE LOJAS"
+            ws["A3"] = "LOJA REMETENTE:"
+            ws["B3"] = nome_loja
+            ws["A4"] = "LOJA DESTINO:"
+            ws["B4"] = loja_destino
+
+            colunas = ["CODIGO BARRA", "CODIGO", "FORNECEDOR", "DESCRICAO", "QTDE"]
+            ws.append([])
+            ws.append(colunas)
+
+            for row in data.itertuples(index=False):
+                ws.append(list(row))
+
+            buf = BytesIO()
+            wb.save(buf)
+            buf.seek(0)
+
+            st.success("✅ Planilha de transferência gerada com sucesso!")
+            st.download_button(
+                label="⬇️ Baixar Planilha",
+                data=buf,
+                file_name="FORMULARIO_TRANSFERENCIA.xlsx"
+            )
+        else:
+            st.warning("⚠️ Preencha todos os campos e adicione pelo menos um item.")
+
+    st.divider()
+    st.subheader("📥 Receber / Conferir Transferência")
+
+    up_conf = st.file_uploader("📤 Upload do Relatório Recebido", type=["xlsx"], key="upload_conf")
+
+    if up_conf:
+        try:
+            wb_conf = load_workbook(up_conf)
+            ws_conf = wb_conf.active
+
+            dados = []
+            for row in ws_conf.iter_rows(min_row=8, max_col=5, values_only=True):
+                if not row[0]:
+                    break
+                dados.append({
+                    "CODIGO BARRA": row[0],
+                    "CODIGO": row[1],
+                    "FORNECEDOR": row[2],
+                    "DESCRICAO": row[3],
+                    "ENVIADO": row[4],
+                    "RECEBIDO": row[4]  # Inicialmente assume tudo recebido
+                })
+
+            if not dados:
+                st.warning("⚠️ Nenhum item encontrado no relatório.")
+            else:
+                st.success(f"✅ {len(dados)} itens carregados do relatório.")
+
+                df_conf = pd.DataFrame(dados)
+                edited_df = st.data_editor(
+                    df_conf,
+                    column_config={
+                        "RECEBIDO": st.column_config.NumberColumn("Recebido", min_value=0),
+                    },
+                    use_container_width=True,
+                    num_rows="dynamic"
+                )
+
+                edited_df["DIVERGENCIA"] = edited_df["RECEBIDO"] - edited_df["ENVIADO"]
+
+                st.subheader("📊 Resumo da Conferência")
+                st.dataframe(edited_df, use_container_width=True)
+
+                divergencias = edited_df[edited_df["DIVERGENCIA"] != 0]
+
+                if not divergencias.empty:
+                    st.warning(f"⚠️ Foram encontradas {len(divergencias)} divergência(s).")
+                    st.dataframe(divergencias[["CODIGO BARRA", "DESCRICAO", "ENVIADO", "RECEBIDO", "DIVERGENCIA"]])
+                else:
+                    st.success("✅ Tudo conferido corretamente!")
+
+                if st.button("📥 Gerar Relatório de Conferência"):
+                    wb_out = Workbook()
+                    ws_out = wb_out.active
+                    ws_out.title = "Conferência"
+
+                    headers = ["CODIGO BARRA", "CODIGO", "FORNECEDOR", "DESCRICAO", "ENVIADO", "RECEBIDO", "DIVERGENCIA"]
+                    ws_out.append(headers)
+
+                    for row in edited_df.itertuples(index=False):
+                        ws_out.append(list(row))
+
+                    buf_out = BytesIO()
+                    wb_out.save(buf_out)
+                    buf_out.seek(0)
+
+                    st.download_button(
+                        "⬇️ Baixar Conferência",
+                        data=buf_out,
+                        file_name="CONFERENCIA_TRANSFERENCIA.xlsx"
+                    )
+        except Exception as e:
+            st.error(f"❌ Erro ao processar o relatório: {e}")
+
 
 # ========================= APP 4: PESQUISA DE PRODUTOS (API) =========================
 def app_pesquisa():
